@@ -231,3 +231,4 @@ This line was added in the test-branch to test git commands.
 
 ## Remote Simulation
 This line was added in the remote-simulation branch to test git pull command.
+This is another line added to test git fetch command.
