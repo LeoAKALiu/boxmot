@@ -54,7 +54,9 @@ pytest-cov = "^6.0.0"
 
 
 [tool.poetry.group.yolo.dependencies]
-ultralytics = {git = "https://github.com/mikel-brostrom/ultralytics.git"}
+# Using existing package from conda environment installed via pip
+# pip install -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple ultralytics==8.3.74
+ultralytics = {version = "8.3.74", optional = true}
 
 
 [tool.poetry.group.export.dependencies]

@@ -175,12 +175,12 @@ class BoostTrack(BaseTracker):
         else:
             self.ecc = None
 
-    def update(self, dets: np.ndarray, img: np.ndarray, embs: Optional[np.ndarray] = None) -> np.ndarray:
+    def update(self, dets, img: np.ndarray, embs: Optional[np.ndarray] = None) -> np.ndarray:
         """
         Update the tracker with detections and an image.
         
         Args:
-          dets (np.ndarray): Detection boxes in the format [[x1,y1,x2,y2,score], ...]
+          dets: Detection boxes, can be np.ndarray or ultralytics.utils.Boxes
           img (np.ndarray): The current image frame.
           embs (Optional[np.ndarray]): Optional precomputed embeddings.
           
@@ -189,7 +189,17 @@ class BoostTrack(BaseTracker):
                       [x1, y1, x2, y2, id, confidence, cls, det_ind]
                       (with cls and det_ind set to -1 if unused)
         """
-        if dets is None or dets.size == 0:
+        # Handle ultralytics.utils.Boxes object
+        if hasattr(dets, 'xyxy') and hasattr(dets, 'conf') and hasattr(dets, 'cls'):
+            if len(dets.xyxy) == 0:
+                dets = np.empty((0, 6))
+            else:
+                # Convert Boxes to numpy array with format [x1, y1, x2, y2, conf, cls]
+                boxes = dets.xyxy.cpu().numpy() if hasattr(dets.xyxy, 'cpu') else dets.xyxy
+                conf = dets.conf.cpu().numpy() if hasattr(dets.conf, 'cpu') else dets.conf
+                cls = dets.cls.cpu().numpy() if hasattr(dets.cls, 'cpu') else dets.cls
+                dets = np.column_stack((boxes, conf, cls))
+        elif dets is None or (hasattr(dets, 'size') and dets.size == 0):
             dets = np.empty((0, 6))
 
         dets = np.hstack([dets, np.arange(len(dets)).reshape(-1, 1)])
@@ -232,9 +242,12 @@ class BoostTrack(BaseTracker):
             dets_embs = np.ones((dets.shape[0], 1))
             
 
-        if self.with_reid and len(self.trackers) > 0:
+        if self.with_reid and len(self.trackers) > 0 and dets_embs.shape[0] > 0:
             tracker_embs = np.array([trk.get_emb() for trk in self.trackers])
-            emb_cost = dets_embs.reshape(dets_embs.shape[0], -1) @ tracker_embs.reshape((tracker_embs.shape[0], -1)).T
+            if dets_embs.size > 0 and tracker_embs.size > 0:
+                emb_cost = dets_embs.reshape(dets_embs.shape[0], -1) @ tracker_embs.reshape((tracker_embs.shape[0], -1)).T
+            else:
+                emb_cost = None
         else:
             emb_cost = None
 
@@ -299,6 +312,13 @@ class BoostTrack(BaseTracker):
     def dump_cache(self):
         if self.ecc is not None:
             self.ecc.save_cache()
+    
+    def reset(self):
+        """Reset the tracker state."""
+        self.frame_count = 0
+        self.trackers = []
+        if self.ecc is not None:
+            self.ecc = ECC(scale=350, video_name=None, use_cache=True)
     
     def get_iou_matrix(self, detections: np.ndarray, buffered: bool = False) -> np.ndarray:
         trackers = np.zeros((len(self.trackers), 5))
